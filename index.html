@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="az">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#102a43">
+  <title>Sənəd Qovuşdur</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+  <style>
+    :root{--navy:#102a43;--blue:#2783e6;--blue2:#1769bd;--green:#2c9b77;--paper:#f3f7fa;--card:#fff;--line:#d7e3ed;--muted:#617589;--danger:#c74747}
+    *{box-sizing:border-box}html{color-scheme:light}
+    body{margin:0;min-height:100vh;padding-bottom:105px;background:var(--paper);color:var(--navy);font-family:Inter,"Segoe UI",system-ui,-apple-system,sans-serif}
+    header{padding:28px 20px 32px;color:#fff;background:linear-gradient(120deg,#102a43,#1769bd 72%,#2783e6)}
+    .wrap,main{width:min(860px,calc(100% - 40px));margin:auto}
+    h1{display:flex;align-items:center;gap:10px;margin:0;font-size:clamp(1.35rem,4vw,1.7rem)}
+    .badge{padding:4px 9px;border:1px solid #ffffff55;border-radius:999px;background:#ffffff1c;font-size:.65rem;letter-spacing:.08em;text-transform:uppercase}
+    header p{max-width:610px;margin:9px 0 0;line-height:1.5;opacity:.88}
+    main{margin-top:22px}
+    .help{margin-bottom:20px;padding:13px 15px;border:1px solid #c8dcf2;border-radius:12px;background:#eaf3fc;color:#284d70;font-size:.84rem;line-height:1.55}
+    .toolbar{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+    .status{font-size:.86rem;color:var(--muted)}.status.ok{color:var(--green);font-weight:700}.status.err{color:var(--danger);font-weight:700}
+    .person{margin-bottom:18px;padding:18px;border:1px solid var(--line);border-radius:15px;background:var(--card);box-shadow:0 2px 8px #102a430b}
+    .person-top{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+    .person-num{display:grid;flex:0 0 35px;height:35px;place-items:center;border-radius:10px;background:var(--navy);color:#fff;font-weight:800}
+    .name{min-width:0;flex:1;padding:11px 12px;border:1px solid var(--line);border-radius:9px;color:var(--navy);font:inherit}
+    .name:focus{border-color:var(--blue);outline:2px solid #2783e633}
+    button{font:inherit}.remove{padding:7px;border:0;border-radius:8px;background:none;color:var(--muted);cursor:pointer;font-size:1.15rem}.remove:hover{background:#fceeee;color:var(--danger)}
+    .slots{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .slot{position:relative;display:flex;min-height:145px;align-items:center;justify-content:center;flex-direction:column;gap:7px;padding:14px;overflow:hidden;border:2px dashed var(--line);border-radius:12px;text-align:center;cursor:pointer;transition:.15s}
+    .slot:hover,.slot.drag{border-color:var(--blue);background:#eff7ff}.slot.filled{border-style:solid;border-color:var(--green);background:#effaf6}
+    .slot-title{font-size:.88rem;font-weight:750}.hint{font-size:.76rem;color:var(--muted)}
+    .thumb{max-width:100%;max-height:105px;border-radius:6px;box-shadow:0 2px 6px #102a4333}.filename{max-width:100%;color:var(--green);font-size:.72rem;font-weight:650;word-break:break-all}
+    .clear{position:absolute;top:7px;right:7px;padding:3px 8px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--muted);cursor:pointer;font-size:.72rem}
+    input[type=file]{display:none}.actions{display:flex;justify-content:flex-end;margin-top:12px}
+    .btn{display:inline-flex;align-items:center;gap:7px;padding:11px 18px;border:0;border-radius:10px;font-weight:700;cursor:pointer}.btn:disabled{opacity:.45;cursor:not-allowed}
+    .blue{background:var(--blue);color:#fff}.blue:hover:not(:disabled){background:var(--blue2)}.ghost{border:1.5px solid var(--line);background:#fff;color:var(--navy)}.ghost:hover{border-color:var(--blue);color:var(--blue)}
+    .green{padding:14px 22px;background:var(--green);color:#fff;font-size:1rem}.footbar{position:fixed;right:0;bottom:0;left:0;padding:12px 20px;border-top:1px solid var(--line);background:#fffffff2;backdrop-filter:blur(8px)}
+    .footbar .wrap{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    @media(max-width:560px){body{padding-bottom:130px}.wrap,main{width:min(100% - 28px,860px)}.slots{grid-template-columns:1fr}.footbar .wrap{align-items:stretch;flex-direction:column}.green{justify-content:center}.person{padding:14px}.badge{display:none}}
+  </style>
+</head>
+<body>
+  <header><div class="wrap">
+    <h1>Sənəd Qovuşdur <span class="badge">lokal alət</span></h1>
+    <p>Etibarnamə və pasport şəklini bir A4 PDF-də birləşdirin. Sənədlər serverə göndərilmir, brauzerinizdə emal olunur.</p>
+  </div></header>
+  <main>
+    <div class="help"><strong>İstifadə qaydası:</strong> Ad-soyadı yazın, etibarnamə və pasport şəkillərini seçin, sonra “PDF yüklə” düyməsinə basın. JPG və PNG qəbul olunur.</div>
+    <div class="toolbar"><button class="btn ghost" id="addBtn" type="button">＋ Yeni şəxs</button><span class="status" id="status" role="status" aria-live="polite"></span></div>
+    <div id="persons"></div>
+  </main>
+  <div class="footbar"><div class="wrap"><span class="status" id="count">Hazır olan şəxs: 0</span><button class="btn green" id="allBtn" type="button" disabled>⬇ Hamısını PDF kimi yüklə</button></div></div>
+  <script>
+    const A4=[595.28,841.89], persons=document.querySelector("#persons"), statusEl=document.querySelector("#status"), allBtn=document.querySelector("#allBtn");
+    let queue=[];
+
+    function slotHTML(kind,label){return `<label class="slot" data-kind="${kind}"><span class="slot-title">${label}</span><span class="hint">Şəkli bura atın və ya toxunun</span><input type="file" accept="image/jpeg,image/png"></label>`}
+    function addPerson(){
+      const card=document.createElement("section");
+      card.className="person";
+      card.innerHTML=`<div class="person-top"><div class="person-num"></div><input class="name" type="text" placeholder="Soyad Ad (məs: Guliyev Suleyman)" aria-label="Soyad və ad"><button class="remove" type="button" title="Şəxsi sil" aria-label="Şəxsi sil">✕</button></div><div class="slots">${slotHTML("poa","Etibarnamə (POA)")}${slotHTML("pass","Pasport")}</div><div class="actions"><button class="btn blue oneBtn" type="button" disabled>⬇ PDF yüklə</button></div>`;
+      persons.append(card);renumber();refresh();
+    }
+    function renumber(){[...document.querySelectorAll(".person")].forEach((p,i)=>p.querySelector(".person-num").textContent=i+1)}
+    function invalidateQueue(){queue=[];allBtn.textContent="⬇ Hamısını PDF kimi yüklə"}
+    function ready(card){const slots=card.querySelectorAll(".slot");return !!(card.querySelector(".name").value.trim()&&slots[0]._bytes&&slots[1]._bytes)}
+    function refresh(){
+      let n=0;document.querySelectorAll(".person").forEach(card=>{const ok=ready(card);card.querySelector(".oneBtn").disabled=!ok;if(ok)n++});
+      document.querySelector("#count").textContent=`Hazır olan şəxs: ${n}`;allBtn.disabled=n===0;
+    }
+    function setStatus(text,type=""){statusEl.textContent=text;statusEl.className=`status ${type}`}
+    function rejectFile(){alert("Yalnız JPG və PNG şəkilləri qəbul olunur. HEIC faylını əvvəlcə JPG kimi saxlayın.")}
+    function setFile(slot,file){
+      if(!file||!["image/jpeg","image/png"].includes(file.type)){rejectFile();return}
+      const reader=new FileReader();
+      reader.onerror=()=>setStatus("Şəkil oxunmadı. Başqa fayl seçin.","err");
+      reader.onload=()=>{
+        slot._bytes=reader.result;slot._type=file.type;slot.classList.add("filled");
+        slot.querySelector(".hint")?.remove();slot.querySelector(".thumb")?.remove();slot.querySelector(".filename")?.remove();slot.querySelector(".clear")?.remove();
+        const image=document.createElement("img");image.className="thumb";image.alt="Seçilmiş sənəd";image.src=URL.createObjectURL(file);image.onload=()=>URL.revokeObjectURL(image.src);
+        const name=document.createElement("span");name.className="filename";name.textContent=file.name;
+        const clear=document.createElement("button");clear.className="clear";clear.type="button";clear.textContent="sil";
+        clear.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();clearSlot(slot)});
+        slot.append(image,name,clear);invalidateQueue();refresh();
+      };reader.readAsArrayBuffer(file);
+    }
+    function clearSlot(slot){
+      slot._bytes=null;slot._type=null;slot.classList.remove("filled");slot.querySelector(".thumb")?.remove();slot.querySelector(".filename")?.remove();slot.querySelector(".clear")?.remove();
+      if(!slot.querySelector(".hint")){const hint=document.createElement("span");hint.className="hint";hint.textContent="Şəkli bura atın və ya toxunun";slot.insertBefore(hint,slot.querySelector("input"))}
+      slot.querySelector("input").value="";invalidateQueue();refresh();
+    }
+    function libReady(){
+      if(typeof PDFLib!=="undefined")return true;
+      setStatus("PDF kitabxanası yüklənməyib. İnternetə qoşulub səhifəni yeniləyin.","err");
+      alert("PDF kitabxanası yüklənməyib.\n\nİnternetə qoşulun və səhifəni yeniləyin.");return false;
+    }
+    async function buildPdf(card){
+      const doc=await PDFLib.PDFDocument.create();
+      for(const slot of card.querySelectorAll(".slot")){
+        const image=slot._type==="image/png"?await doc.embedPng(slot._bytes):await doc.embedJpg(slot._bytes);
+        const page=doc.addPage(A4),scale=Math.min(A4[0]/image.width,A4[1]/image.height),w=image.width*scale,h=image.height*scale;
+        page.drawImage(image,{x:(A4[0]-w)/2,y:(A4[1]-h)/2,width:w,height:h});
+      }return doc.save();
+    }
+    function safeName(value){return value.trim().replace(/\s+/g,"_").replace(/[^\p{L}\p{N}_-]/gu,"")||"sened"}
+    async function savePdf(bytes,name){
+      const blob=new Blob([bytes],{type:"application/pdf"}),filename=`${name}.pdf`;
+      try{const file=new File([blob],filename,{type:"application/pdf"});if(navigator.canShare?.({files:[file]})){await navigator.share({files:[file],title:filename});return true}}
+      catch(error){if(error?.name==="AbortError")return false}
+      const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);return true;
+    }
+    async function downloadCard(card,button){
+      if(!libReady()||!ready(card))return false;button.disabled=true;const old=button.textContent;button.textContent="Hazırlanır…";
+      try{const saved=await savePdf(await buildPdf(card),safeName(card.querySelector(".name").value));if(saved)setStatus("PDF hazırdır ✓","ok");return saved}
+      catch(error){console.error(error);setStatus(`Xəta: ${error.message||"şəkilləri yenidən yoxlayın."}`,"err");return false}
+      finally{button.textContent=old;refresh()}
+    }
+    persons.addEventListener("input",e=>{if(e.target.matches(".name")){invalidateQueue();refresh()}});
+    persons.addEventListener("click",e=>{
+      const card=e.target.closest(".person");if(e.target.closest(".remove")){card.remove();invalidateQueue();renumber();refresh()}
+      else if(e.target.closest(".oneBtn"))downloadCard(card,e.target.closest(".oneBtn"));
+    });
+    persons.addEventListener("change",e=>{if(e.target.type==="file"){setFile(e.target.closest(".slot"),e.target.files[0]);e.target.value=""}});
+    persons.addEventListener("dragover",e=>{const slot=e.target.closest(".slot");if(slot){e.preventDefault();slot.classList.add("drag")}});
+    persons.addEventListener("dragleave",e=>e.target.closest(".slot")?.classList.remove("drag"));
+    persons.addEventListener("drop",e=>{const slot=e.target.closest(".slot");if(slot){e.preventDefault();slot.classList.remove("drag");setFile(slot,e.dataTransfer.files[0])}});
+    document.querySelector("#addBtn").addEventListener("click",addPerson);
+    allBtn.addEventListener("click",async()=>{
+      if(!libReady())return;if(!queue.length)queue=[...document.querySelectorAll(".person")].filter(ready);
+      const card=queue.shift();if(!card)return;allBtn.disabled=true;allBtn.textContent="Hazırlanır…";
+      await downloadCard(card,allBtn);
+      if(queue.length){allBtn.textContent=`⬇ Növbəti PDF (${queue.length} qalıb)`;setStatus("Növbəti şəxs üçün düyməyə yenə basın.","ok")}
+      else{allBtn.textContent="⬇ Hamısını PDF kimi yüklə";setStatus("Bütün PDF-lər hazırdır ✓","ok")}refresh();
+    });
+    for(let i=0;i<4;i++)addPerson();
+    setStatus("✓ Alət işə düşdü","ok");
+    window.addEventListener("error",e=>setStatus(`Xəta: ${e.message}`,"err"));
+  </script>
+</body>
+</html>
