@@ -31,7 +31,7 @@
     .slot-title{font-size:.88rem;font-weight:750}.hint{font-size:.76rem;color:var(--muted)}
     .thumb{max-width:100%;max-height:105px;border-radius:6px;box-shadow:0 2px 6px #102a4333}.filename{max-width:100%;color:var(--green);font-size:.72rem;font-weight:650;word-break:break-all}
     .clear{position:absolute;top:7px;right:7px;padding:3px 8px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--muted);cursor:pointer;font-size:.72rem}
-    input[type=file]{display:none}.actions{display:flex;justify-content:flex-end;margin-top:12px}
+    input[type=file]{display:none}.actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:9px;margin-top:12px}
     .btn{display:inline-flex;align-items:center;gap:7px;padding:11px 18px;border:0;border-radius:10px;font-weight:700;cursor:pointer}.btn:disabled{opacity:.45;cursor:not-allowed}
     .blue{background:var(--blue);color:#fff}.blue:hover:not(:disabled){background:var(--blue2)}.ghost{border:1.5px solid var(--line);background:#fff;color:var(--navy)}.ghost:hover{border-color:var(--blue);color:var(--blue)}
     .green{padding:14px 22px;background:var(--green);color:#fff;font-size:1rem}.footbar{position:fixed;right:0;bottom:0;left:0;padding:12px 20px;border-top:1px solid var(--line);background:#fffffff2;backdrop-filter:blur(8px)}
@@ -58,14 +58,14 @@
     function addPerson(){
       const card=document.createElement("section");
       card.className="person";
-      card.innerHTML=`<div class="person-top"><div class="person-num"></div><input class="name" type="text" placeholder="Soyad Ad (məs: Guliyev Suleyman)" aria-label="Soyad və ad"><button class="remove" type="button" title="Şəxsi sil" aria-label="Şəxsi sil">✕</button></div><div class="slots">${slotHTML("poa","Etibarnamə (POA)")}${slotHTML("pass","Pasport")}</div><div class="actions"><button class="btn blue oneBtn" type="button" disabled>⬇ PDF yüklə</button></div>`;
+      card.innerHTML=`<div class="person-top"><div class="person-num"></div><input class="name" type="text" placeholder="Soyad Ad (məs: Guliyev Suleyman)" aria-label="Soyad və ad"><button class="remove" type="button" title="Şəxsi sil" aria-label="Şəxsi sil">✕</button></div><div class="slots">${slotHTML("poa","Etibarnamə (POA)")}${slotHTML("pass","Pasport")}</div><div class="actions"><button class="btn ghost shareBtn" type="button" disabled>↗ Paylaş</button><button class="btn blue oneBtn" type="button" disabled>⬇ PDF yüklə</button></div>`;
       persons.append(card);renumber();refresh();
     }
     function renumber(){[...document.querySelectorAll(".person")].forEach((p,i)=>p.querySelector(".person-num").textContent=i+1)}
     function invalidateQueue(){queue=[];allBtn.textContent="⬇ Hamısını PDF kimi yüklə"}
     function ready(card){const slots=card.querySelectorAll(".slot");return !!(card.querySelector(".name").value.trim()&&slots[0]._bytes&&slots[1]._bytes)}
     function refresh(){
-      let n=0;document.querySelectorAll(".person").forEach(card=>{const ok=ready(card);card.querySelector(".oneBtn").disabled=!ok;if(ok)n++});
+      let n=0;document.querySelectorAll(".person").forEach(card=>{const ok=ready(card);card.querySelectorAll(".oneBtn,.shareBtn").forEach(button=>button.disabled=!ok);if(ok)n++});
       document.querySelector("#count").textContent=`Hazır olan şəxs: ${n}`;allBtn.disabled=n===0;
     }
     function setStatus(text,type=""){statusEl.textContent=text;statusEl.className=`status ${type}`}
@@ -127,10 +127,25 @@
       catch(error){console.error(error);setStatus(`Xəta: ${error.message||"şəkilləri yenidən yoxlayın."}`,"err");return false}
       finally{button.textContent=old;refresh()}
     }
+    async function shareCard(card,button){
+      if(!libReady()||!ready(card))return;
+      button.disabled=true;const old=button.textContent;button.textContent="Hazırlanır…";
+      try{
+        const bytes=await buildPdf(card);
+        const filename=`${safeName(card.querySelector(".name").value)}.pdf`;
+        const file=new File([bytes],filename,{type:"application/pdf"});
+        if(!navigator.share||!navigator.canShare?.({files:[file]}))throw new Error("Bu brauzer fayl paylaşma funksiyasını dəstəkləmir.");
+        await navigator.share({files:[file],title:filename});
+        setStatus("PDF paylaşmağa hazırdır ✓","ok");
+      }catch(error){
+        if(error?.name!=="AbortError"){console.error(error);setStatus(error.message||"PDF paylaşıla bilmədi.","err")}
+      }finally{button.textContent=old;refresh()}
+    }
     persons.addEventListener("input",e=>{if(e.target.matches(".name")){invalidateQueue();refresh()}});
     persons.addEventListener("click",e=>{
       const card=e.target.closest(".person");if(e.target.closest(".remove")){card.remove();invalidateQueue();renumber();refresh()}
       else if(e.target.closest(".oneBtn"))downloadCard(card,e.target.closest(".oneBtn"));
+      else if(e.target.closest(".shareBtn"))shareCard(card,e.target.closest(".shareBtn"));
     });
     persons.addEventListener("change",e=>{if(e.target.type==="file"){setFile(e.target.closest(".slot"),e.target.files[0]);e.target.value=""}});
     persons.addEventListener("dragover",e=>{const slot=e.target.closest(".slot");if(slot){e.preventDefault();slot.classList.add("drag")}});
