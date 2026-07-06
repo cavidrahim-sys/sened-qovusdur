@@ -45,7 +45,7 @@
     <p>Etibarnamə və pasport şəklini bir A4 PDF-də birləşdirin. Sənədlər serverə göndərilmir, brauzerinizdə emal olunur.</p>
   </div></header>
   <main>
-    <div class="help"><strong>İstifadə qaydası:</strong> Ad-soyadı yazın, etibarnamə və pasport şəkillərini seçin, sonra “PDF yüklə” düyməsinə basın. JPG və PNG qəbul olunur.</div>
+    <div class="help"><strong>İstifadə qaydası:</strong> Ad-soyadı yazın, etibarnamə və pasport şəkillərini seçin, sonra “Paylaş” düyməsinə basın. JPG və PNG qəbul olunur.</div>
     <div class="toolbar"><button class="btn ghost" id="addBtn" type="button">＋ Yeni şəxs</button><span class="status" id="status" role="status" aria-live="polite"></span></div>
     <div id="persons"></div>
   </main>
@@ -58,14 +58,14 @@
     function addPerson(){
       const card=document.createElement("section");
       card.className="person";
-      card.innerHTML=`<div class="person-top"><div class="person-num"></div><input class="name" type="text" placeholder="Soyad Ad (məs: Guliyev Suleyman)" aria-label="Soyad və ad"><button class="remove" type="button" title="Şəxsi sil" aria-label="Şəxsi sil">✕</button></div><div class="slots">${slotHTML("poa","Etibarnamə (POA)")}${slotHTML("pass","Pasport")}</div><div class="actions"><button class="btn ghost shareBtn" type="button" disabled>↗ Paylaş</button><button class="btn blue oneBtn" type="button" disabled>⬇ PDF yüklə</button></div>`;
+      card.innerHTML=`<div class="person-top"><div class="person-num"></div><input class="name" type="text" placeholder="Soyad Ad (məs: Guliyev Suleyman)" aria-label="Soyad və ad"><button class="remove" type="button" title="Şəxsi sil" aria-label="Şəxsi sil">✕</button></div><div class="slots">${slotHTML("poa","Etibarnamə (POA)")}${slotHTML("pass","Pasport")}</div><div class="actions"><button class="btn blue shareBtn" type="button" disabled>↗ Paylaş</button></div>`;
       persons.append(card);renumber();refresh();
     }
     function renumber(){[...document.querySelectorAll(".person")].forEach((p,i)=>p.querySelector(".person-num").textContent=i+1)}
     function invalidateQueue(){queue=[];allBtn.textContent="↗ Hamısını paylaş"}
     function ready(card){const slots=card.querySelectorAll(".slot");return !!(card.querySelector(".name").value.trim()&&slots[0]._bytes&&slots[1]._bytes)}
     function refresh(){
-      let n=0;document.querySelectorAll(".person").forEach(card=>{const ok=ready(card);card.querySelectorAll(".oneBtn,.shareBtn").forEach(button=>button.disabled=!ok);if(ok)n++});
+      let n=0;document.querySelectorAll(".person").forEach(card=>{const ok=ready(card);card.querySelector(".shareBtn").disabled=!ok;if(ok)n++});
       document.querySelector("#count").textContent=`Hazır olan şəxs: ${n}`;allBtn.disabled=n===0;
     }
     function setStatus(text,type=""){statusEl.textContent=text;statusEl.className=`status ${type}`}
@@ -106,27 +106,6 @@
       const personName=value.trim().replace(/\s+/g," ").replace(/[^\p{L}\p{N} ._-]/gu,"");
       return `Power of Attorney - ${personName||"Ad Soyad"}`;
     }
-    async function savePdf(bytes,name){
-      const pdfBytes=bytes instanceof Uint8Array?bytes:new Uint8Array(bytes);
-      const blob=new Blob([pdfBytes],{type:"application/pdf"});
-      const filename=`${name}.pdf`;
-      const url=URL.createObjectURL(blob);
-      const a=document.createElement("a");
-      a.href=url;
-      a.download=filename;
-      a.type="application/pdf";
-      document.body.append(a);
-      a.click();
-      a.remove();
-      setTimeout(()=>URL.revokeObjectURL(url),60000);
-      return true;
-    }
-    async function downloadCard(card,button){
-      if(!libReady()||!ready(card))return false;button.disabled=true;const old=button.textContent;button.textContent="Hazırlanır…";
-      try{const saved=await savePdf(await buildPdf(card),safeName(card.querySelector(".name").value));if(saved)setStatus("PDF hazırdır ✓","ok");return saved}
-      catch(error){console.error(error);setStatus(`Xəta: ${error.message||"şəkilləri yenidən yoxlayın."}`,"err");return false}
-      finally{button.textContent=old;refresh()}
-    }
     async function shareCard(card,button){
       if(!libReady()||!ready(card))return false;
       button.disabled=true;const old=button.textContent;button.textContent="Hazırlanır…";
@@ -147,7 +126,6 @@
     persons.addEventListener("input",e=>{if(e.target.matches(".name")){invalidateQueue();refresh()}});
     persons.addEventListener("click",e=>{
       const card=e.target.closest(".person");if(e.target.closest(".remove")){card.remove();invalidateQueue();renumber();refresh()}
-      else if(e.target.closest(".oneBtn"))downloadCard(card,e.target.closest(".oneBtn"));
       else if(e.target.closest(".shareBtn"))shareCard(card,e.target.closest(".shareBtn"));
     });
     persons.addEventListener("change",e=>{if(e.target.type==="file"){setFile(e.target.closest(".slot"),e.target.files[0]);e.target.value=""}});
