@@ -102,7 +102,10 @@
         page.drawImage(image,{x:(A4[0]-w)/2,y:(A4[1]-h)/2,width:w,height:h});
       }return doc.save();
     }
-    function safeName(value){return value.trim().replace(/\s+/g,"_").replace(/[^\p{L}\p{N}_-]/gu,"")||"sened"}
+    function safeName(value){
+      const personName=value.trim().replace(/\s+/g," ").replace(/[^\p{L}\p{N} ._-]/gu,"");
+      return `Power of Attorney - ${personName||"Ad Soyad"}`;
+    }
     async function savePdf(bytes,name){
       const blob=new Blob([bytes],{type:"application/pdf"}),filename=`${name}.pdf`;
       try{const file=new File([blob],filename,{type:"application/pdf"});if(navigator.canShare?.({files:[file]})){await navigator.share({files:[file],title:filename});return true}}
