@@ -84,14 +84,17 @@
     function cleanNamePart(value){
       return value.replace(/[^A-ZƏÖÜĞÇŞİI\s-]/g," ").replace(/\b(SURNAME|GIVEN|NAME|PATRONYMIC|AZƏRBAYCAN|REPUBLIC|SEX|DATE|BIRTH)\b/g," ").replace(/\s+/g," ").trim();
     }
+    function normalizeMrzLetters(value){
+      return value.replace(/0/g,"O").replace(/1/g,"I").replace(/5/g,"S").replace(/8/g,"B");
+    }
     function nameFromMrz(text){
       const lines=text.toUpperCase().split(/\n/).map(line=>line.replace(/[^A-Z0-9<]/g,"")).filter(line=>line.includes("<<"));
-      const nameLine=lines.find(line=>line.startsWith("P<")&&line.includes("<<"))||lines[lines.length-1];
+      const nameLine=lines.find(line=>/^P[A-Z<][A-Z]{3}/.test(line)&&line.includes("<<"))||lines[0];
       if(!nameLine)return "";
-      const raw=(nameLine.startsWith("P<")?nameLine.slice(5):nameLine).replace(/[0-9]/g,"");
+      const raw=(nameLine.startsWith("P")?nameLine.slice(5):nameLine).replace(/[0-9]/g,"");
       const [surname="",given=""]=raw.split("<<");
-      const surnameClean=surname.replace(/</g," ").trim();
-      const givenClean=given.replace(/</g," ").trim();
+      const surnameClean=normalizeMrzLetters(surname).replace(/</g," ").trim();
+      const givenClean=normalizeMrzLetters(given).replace(/</g," ").trim();
       if(surnameClean.length<2||givenClean.length<2)return "";
       return titleCaseName(`${surnameClean} ${givenClean}`.replace(/\s+/g," "));
     }
@@ -105,7 +108,28 @@
       if(!surname||!given)return "";
       return titleCaseName(`${surname} ${given}`.replace(/\s+/g," "));
     }
-    function extractPersonName(text){return nameFromMrz(text)||nameFromLabels(text)}
+    function extractPersonName(text,{allowLabels=false}={}){return nameFromMrz(text)||(allowLabels?nameFromLabels(text):"")}
+    function fileToImage(file){
+      return new Promise((resolve,reject)=>{
+        const image=new Image(),url=URL.createObjectURL(file);
+        image.onload=()=>{URL.revokeObjectURL(url);resolve(image)};
+        image.onerror=()=>{URL.revokeObjectURL(url);reject(new Error("Şəkil açıla bilmədi."))};
+        image.src=url;
+      });
+    }
+    async function makeMrzCanvas(file){
+      const image=await fileToImage(file),sourceY=image.height*.62,sourceH=image.height*.28,scale=Math.min(2,1600/image.width);
+      const canvas=document.createElement("canvas"),ctx=canvas.getContext("2d",{willReadFrequently:true});
+      canvas.width=Math.max(1,Math.round(image.width*scale));canvas.height=Math.max(1,Math.round(sourceH*scale));
+      ctx.drawImage(image,0,sourceY,image.width,sourceH,0,0,canvas.width,canvas.height);
+      const data=ctx.getImageData(0,0,canvas.width,canvas.height);
+      for(let i=0;i<data.data.length;i+=4){
+        const gray=(data.data[i]*.3+data.data[i+1]*.59+data.data[i+2]*.11)>145?255:0;
+        data.data[i]=data.data[i+1]=data.data[i+2]=gray;
+      }
+      ctx.putImageData(data,0,0);
+      return canvas;
+    }
     function readNameFromPassport(slot,file){
       if(slot.dataset.kind!=="pass"||typeof Tesseract==="undefined")return;
       const card=slot.closest(".person"),nameInput=card.querySelector(".name");
@@ -113,9 +137,15 @@
       ocrQueue=ocrQueue.then(async()=>{
         if(nameInput.value.trim())return;
         try{
-          setStatus(`Ad oxunur: ${file.name}`,"");
-          const result=await Tesseract.recognize(file,"eng");
-          const found=extractPersonName(result.data.text||"");
+          setStatus(`MRZ-dən ad oxunur: ${file.name}`,"");
+          const mrzCanvas=await makeMrzCanvas(file);
+          const mrzResult=await Tesseract.recognize(mrzCanvas,"eng",{tessedit_char_whitelist:"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<"});
+          let found=extractPersonName(mrzResult.data.text||"");
+          if(!found){
+            setStatus("MRZ alınmadı, ad sahəsindən oxunur…","");
+            const result=await Tesseract.recognize(file,"eng");
+            found=extractPersonName(result.data.text||"",{allowLabels:true});
+          }
           if(found&&!nameInput.value.trim()){
             nameInput.value=found;invalidateQueue();refresh();setStatus(`Ad avtomatik yazıldı: ${found}`,"ok");
           }else setStatus("Ad avtomatik oxunmadı, lazım olsa əl ilə yazın.","err");
