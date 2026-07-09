@@ -17,7 +17,7 @@
     header p{max-width:610px;margin:9px 0 0;line-height:1.5;opacity:.88}
     main{margin-top:22px}
     .help{margin-bottom:20px;padding:13px 15px;border:1px solid #c8dcf2;border-radius:12px;background:#eaf3fc;color:#284d70;font-size:.84rem;line-height:1.55}
-    .toolbar{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+    .toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:18px}
     .status{font-size:.86rem;color:var(--muted)}.status.ok{color:var(--green);font-weight:700}.status.err{color:var(--danger);font-weight:700}
     .person{margin-bottom:18px;padding:18px;border:1px solid var(--line);border-radius:15px;background:var(--card);box-shadow:0 2px 8px #102a430b}
     .person-top{display:flex;align-items:center;gap:12px;margin-bottom:14px}
@@ -45,9 +45,16 @@
     <p>Etibarnamə və pasport şəklini bir A4 PDF-də birləşdirin. Sənədlər serverə göndərilmir, brauzerinizdə emal olunur.</p>
   </div></header>
   <main>
-    <div class="help"><strong>İstifadə qaydası:</strong> Ad-soyadı yazın, etibarnamə və pasport şəkillərini seçin, sonra “Paylaş” düyməsinə basın. JPG və PNG qəbul olunur.</div>
-    <div class="toolbar"><button class="btn ghost" id="addBtn" type="button">＋ Yeni şəxs</button><span class="status" id="status" role="status" aria-live="polite"></span></div>
+    <div class="help"><strong>İstifadə qaydası:</strong> Ad-soyadı yazın, etibarnamə və pasport şəkillərini seçin, sonra “Paylaş” düyməsinə basın. Çoxlu sənəd üçün əvvəlcə POA-ları, sonra vəsiqələri seçin — fayllar seçim sırasına görə qarşı-qarşıya düzüləcək. JPG və PNG qəbul olunur.</div>
+    <div class="toolbar">
+      <button class="btn ghost" id="bulkPoaBtn" type="button">＋ POA-ları seç</button>
+      <button class="btn ghost" id="bulkPassBtn" type="button">＋ Vəsiqələri seç</button>
+      <button class="btn ghost" id="addBtn" type="button">＋ Yeni şəxs</button>
+      <span class="status" id="status" role="status" aria-live="polite"></span>
+    </div>
     <div id="persons"></div>
+    <input id="bulkPoaInput" type="file" accept="image/jpeg,image/png" multiple>
+    <input id="bulkPassInput" type="file" accept="image/jpeg,image/png" multiple>
   </main>
   <div class="footbar"><div class="wrap"><span class="status" id="count">Hazır olan şəxs: 0</span><button class="btn green" id="allBtn" type="button" disabled>↗ Hamısını paylaş</button></div></div>
   <script>
@@ -83,6 +90,20 @@
         clear.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();clearSlot(slot)});
         slot.append(image,name,clear);invalidateQueue();refresh();
       };reader.readAsArrayBuffer(file);
+    }
+    function personCards(){return [...document.querySelectorAll(".person")]}
+    function ensureCards(count){while(personCards().length<count)addPerson()}
+    function bulkSet(kind,files){
+      const selected=[...files],valid=selected.filter(file=>["image/jpeg","image/png"].includes(file.type));
+      if(!selected.length)return;
+      if(valid.length!==selected.length)alert("Bəzi fayllar keçildi: yalnız JPG və PNG qəbul olunur.");
+      ensureCards(valid.length);
+      const cards=personCards();
+      valid.forEach((file,index)=>setFile(cards[index].querySelector(`.slot[data-kind="${kind}"]`),file));
+      const other=kind==="poa"?"pass":"poa";
+      const otherCount=cards.filter(card=>card.querySelector(`.slot[data-kind="${other}"]`)._bytes).length;
+      if(otherCount&&otherCount!==valid.length)setStatus(`Diqqət: ${valid.length} ${kind==="poa"?"POA":"vəsiqə"} seçildi, qarşı tərəfdə ${otherCount} fayl var.`,"err");
+      else setStatus(`${valid.length} fayl seçim sırasına görə yerləşdirildi ✓`,"ok");
     }
     function clearSlot(slot){
       slot._bytes=null;slot._type=null;slot.classList.remove("filled");slot.querySelector(".thumb")?.remove();slot.querySelector(".filename")?.remove();slot.querySelector(".clear")?.remove();
@@ -133,6 +154,10 @@
     persons.addEventListener("dragleave",e=>e.target.closest(".slot")?.classList.remove("drag"));
     persons.addEventListener("drop",e=>{const slot=e.target.closest(".slot");if(slot){e.preventDefault();slot.classList.remove("drag");setFile(slot,e.dataTransfer.files[0])}});
     document.querySelector("#addBtn").addEventListener("click",addPerson);
+    document.querySelector("#bulkPoaBtn").addEventListener("click",()=>document.querySelector("#bulkPoaInput").click());
+    document.querySelector("#bulkPassBtn").addEventListener("click",()=>document.querySelector("#bulkPassInput").click());
+    document.querySelector("#bulkPoaInput").addEventListener("change",e=>{bulkSet("poa",e.target.files);e.target.value=""});
+    document.querySelector("#bulkPassInput").addEventListener("change",e=>{bulkSet("pass",e.target.files);e.target.value=""});
     allBtn.addEventListener("click",async()=>{
       if(!libReady())return;if(!queue.length)queue=[...document.querySelectorAll(".person")].filter(ready);
       const card=queue[0];if(!card)return;allBtn.disabled=true;allBtn.textContent="Hazırlanır…";
