@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#102a43">
   <title>Sənəd Qovuşdur</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <style>
     :root{--navy:#102a43;--blue:#2783e6;--blue2:#1769bd;--green:#2c9b77;--paper:#f3f7fa;--card:#fff;--line:#d7e3ed;--muted:#617589;--danger:#c74747}
     *{box-sizing:border-box}html{color-scheme:light}
@@ -45,7 +46,7 @@
     <p>Etibarnamə və pasport şəklini bir A4 PDF-də birləşdirin. Sənədlər serverə göndərilmir, brauzerinizdə emal olunur.</p>
   </div></header>
   <main>
-    <div class="help"><strong>İstifadə qaydası:</strong> Ad-soyadı yazın, etibarnamə və pasport şəkillərini seçin, sonra “Paylaş” düyməsinə basın. Çoxlu sənəd üçün əvvəlcə POA-ları, sonra vəsiqələri seçin — fayllar seçim sırasına görə qarşı-qarşıya düzüləcək. JPG və PNG qəbul olunur.</div>
+    <div class="help"><strong>İstifadə qaydası:</strong> Etibarnamə və pasport şəkillərini seçin, sonra “Paylaş” düyməsinə basın. Vəsiqə yüklənəndə ad-soyad avtomatik oxunmağa çalışacaq. Çoxlu sənəd üçün əvvəlcə POA-ları, sonra vəsiqələri seçin — fayllar seçim sırasına görə qarşı-qarşıya düzüləcək. JPG və PNG qəbul olunur.</div>
     <div class="toolbar">
       <button class="btn ghost" id="bulkPoaBtn" type="button">＋ POA-ları seç</button>
       <button class="btn ghost" id="bulkPassBtn" type="button">＋ Vəsiqələri seç</button>
@@ -59,7 +60,7 @@
   <div class="footbar"><div class="wrap"><span class="status" id="count">Hazır olan şəxs: 0</span><button class="btn green" id="allBtn" type="button" disabled>↗ Hamısını paylaş</button></div></div>
   <script>
     const A4=[595.28,841.89], persons=document.querySelector("#persons"), statusEl=document.querySelector("#status"), allBtn=document.querySelector("#allBtn");
-    let queue=[];
+    let queue=[],ocrQueue=Promise.resolve();
 
     function slotHTML(kind,label){return `<label class="slot" data-kind="${kind}"><span class="slot-title">${label}</span><span class="hint">Şəkli bura atın və ya toxunun</span><input type="file" accept="image/jpeg,image/png"></label>`}
     function addPerson(){
@@ -77,6 +78,50 @@
     }
     function setStatus(text,type=""){statusEl.textContent=text;statusEl.className=`status ${type}`}
     function rejectFile(){alert("Yalnız JPG və PNG şəkilləri qəbul olunur. HEIC faylını əvvəlcə JPG kimi saxlayın.")}
+    function titleCaseName(value){
+      return value.toLowerCase().replace(/\b[\p{L}]/gu,letter=>letter.toLocaleUpperCase("az-AZ"));
+    }
+    function cleanNamePart(value){
+      return value.replace(/[^A-ZƏÖÜĞÇŞİI\s-]/g," ").replace(/\b(SURNAME|GIVEN|NAME|PATRONYMIC|AZƏRBAYCAN|REPUBLIC|SEX|DATE|BIRTH)\b/g," ").replace(/\s+/g," ").trim();
+    }
+    function nameFromMrz(text){
+      const lines=text.toUpperCase().split(/\n/).map(line=>line.replace(/[^A-Z0-9<]/g,"")).filter(line=>line.includes("<<"));
+      const nameLine=lines.find(line=>line.startsWith("P<")&&line.includes("<<"))||lines[lines.length-1];
+      if(!nameLine)return "";
+      const raw=(nameLine.startsWith("P<")?nameLine.slice(5):nameLine).replace(/[0-9]/g,"");
+      const [surname="",given=""]=raw.split("<<");
+      const surnameClean=surname.replace(/</g," ").trim();
+      const givenClean=given.replace(/</g," ").trim();
+      if(surnameClean.length<2||givenClean.length<2)return "";
+      return titleCaseName(`${surnameClean} ${givenClean}`.replace(/\s+/g," "));
+    }
+    function nameFromLabels(text){
+      const rawLines=text.toUpperCase().split(/\n/).map(line=>line.replace(/\s+/g," ").trim()).filter(line=>line.length>1);
+      let surname="",given="";
+      for(let i=0;i<rawLines.length;i++){
+        if(!surname&&/\b(SURNAME|SOYAD)\b/.test(rawLines[i]))surname=rawLines.slice(i+1,i+4).map(cleanNamePart).find(line=>/^[A-ZƏÖÜĞÇŞİI -]{2,}$/.test(line)&&!/\b(GIVEN|NAME|AD)\b/.test(line))||"";
+        if(!given&&/\b(GIVEN\s*NAME|GIVEN|AD)\b/.test(rawLines[i]))given=rawLines.slice(i+1,i+4).map(cleanNamePart).find(line=>/^[A-ZƏÖÜĞÇŞİI -]{2,}$/.test(line)&&!/\b(SURNAME|SOYAD)\b/.test(line))||"";
+      }
+      if(!surname||!given)return "";
+      return titleCaseName(`${surname} ${given}`.replace(/\s+/g," "));
+    }
+    function extractPersonName(text){return nameFromMrz(text)||nameFromLabels(text)}
+    function readNameFromPassport(slot,file){
+      if(slot.dataset.kind!=="pass"||typeof Tesseract==="undefined")return;
+      const card=slot.closest(".person"),nameInput=card.querySelector(".name");
+      if(nameInput.value.trim())return;
+      ocrQueue=ocrQueue.then(async()=>{
+        if(nameInput.value.trim())return;
+        try{
+          setStatus(`Ad oxunur: ${file.name}`,"");
+          const result=await Tesseract.recognize(file,"eng");
+          const found=extractPersonName(result.data.text||"");
+          if(found&&!nameInput.value.trim()){
+            nameInput.value=found;invalidateQueue();refresh();setStatus(`Ad avtomatik yazıldı: ${found}`,"ok");
+          }else setStatus("Ad avtomatik oxunmadı, lazım olsa əl ilə yazın.","err");
+        }catch(error){console.error(error);setStatus("Ad oxuma alınmadı, əl ilə yazmaq olar.","err")}
+      });
+    }
     function setFile(slot,file){
       if(!file||!["image/jpeg","image/png"].includes(file.type)){rejectFile();return}
       const reader=new FileReader();
@@ -89,6 +134,7 @@
         const clear=document.createElement("button");clear.className="clear";clear.type="button";clear.textContent="sil";
         clear.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();clearSlot(slot)});
         slot.append(image,name,clear);invalidateQueue();refresh();
+        readNameFromPassport(slot,file);
       };reader.readAsArrayBuffer(file);
     }
     function personCards(){return [...document.querySelectorAll(".person")]}
