@@ -89,7 +89,7 @@
     }
     function nameFromMrz(text){
       const lines=text.toUpperCase().split(/\n/).map(line=>line.replace(/[^A-Z0-9<]/g,"")).filter(line=>line.includes("<<"));
-      const nameLine=lines.find(line=>/^P[A-Z<][A-Z]{3}/.test(line)&&line.includes("<<"))||lines[0];
+      const nameLine=lines.find(line=>/^P[A-Z<]AZE[A-Z<]{2,}<</.test(line));
       if(!nameLine)return "";
       const raw=(nameLine.startsWith("P")?nameLine.slice(5):nameLine).replace(/[0-9]/g,"");
       const [surname="",given=""]=raw.split("<<");
@@ -108,7 +108,7 @@
       if(!surname||!given)return "";
       return titleCaseName(`${surname} ${given}`.replace(/\s+/g," "));
     }
-    function extractPersonName(text,{allowLabels=false}={}){return nameFromMrz(text)||(allowLabels?nameFromLabels(text):"")}
+    function extractPersonName(text){return nameFromMrz(text)}
     function fileToImage(file){
       return new Promise((resolve,reject)=>{
         const image=new Image(),url=URL.createObjectURL(file);
@@ -140,15 +140,10 @@
           setStatus(`MRZ-dən ad oxunur: ${file.name}`,"");
           const mrzCanvas=await makeMrzCanvas(file);
           const mrzResult=await Tesseract.recognize(mrzCanvas,"eng",{tessedit_char_whitelist:"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<"});
-          let found=extractPersonName(mrzResult.data.text||"");
-          if(!found){
-            setStatus("MRZ alınmadı, ad sahəsindən oxunur…","");
-            const result=await Tesseract.recognize(file,"eng");
-            found=extractPersonName(result.data.text||"",{allowLabels:true});
-          }
+          const found=extractPersonName(mrzResult.data.text||"");
           if(found&&!nameInput.value.trim()){
             nameInput.value=found;invalidateQueue();refresh();setStatus(`Ad avtomatik yazıldı: ${found}`,"ok");
-          }else setStatus("Ad avtomatik oxunmadı, lazım olsa əl ilə yazın.","err");
+          }else setStatus("MRZ dəqiq oxunmadı, adı əl ilə yazın.","err");
         }catch(error){console.error(error);setStatus("Ad oxuma alınmadı, əl ilə yazmaq olar.","err")}
       });
     }
@@ -244,7 +239,7 @@
     });
     for(let i=0;i<4;i++)addPerson();
     setStatus("✓ Alət işə düşdü","ok");
-    window.addEventListener("error",e=>setStatus(`Xəta: ${e.message}`,"err"));
+    window.addEventListener("error",e=>{if(e.message&&e.message!=="Script error.")setStatus(`Xəta: ${e.message}`,"err")});
   </script>
 </body>
 </html>
